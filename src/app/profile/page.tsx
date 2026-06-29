@@ -105,7 +105,7 @@ export default function ProfilePage() {
             <h2 className="font-display text-2xl font-bold mb-3 text-pure-white">Account Access Locked</h2>
             <p className="text-white/50 text-sm mb-8">Please log in to view and manage your custom denim fit profiles.</p>
             <a href="/signin" className="inline-block">
-              <BubblyButton variant="primary" className="!px-8 !py-3 font-semibold text-xs tracking-wider uppercase">
+              <BubblyButton variant="primary" className="px-8! py-3! font-semibold text-xs tracking-wider uppercase">
                 Sign In
               </BubblyButton>
             </a>
@@ -124,7 +124,7 @@ export default function ProfilePage() {
             <h2 className="font-display text-2xl font-bold mb-3 text-pure-white">No Profiles Initialized</h2>
             <p className="text-white/50 text-sm mb-8">We haven't received your sizing profile details yet. Let's chat and find your fit.</p>
             <a href="/voice" className="inline-block">
-              <BubblyButton variant="primary" className="!px-8 !py-3 font-semibold text-xs tracking-wider uppercase">
+              <BubblyButton variant="primary" className="px-8! py-3! font-semibold text-xs tracking-wider uppercase">
                 Start Voice Quiz
               </BubblyButton>
             </a>

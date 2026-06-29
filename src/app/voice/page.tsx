@@ -20,6 +20,19 @@ interface Answers {
   frustrations: string[];
 }
 
+export interface JackieProfile {
+  summary: string;
+  fitProfile: {
+    primaryIssue: string;
+    recommendedRise: string;
+    recommendedCut: string;
+    avoidCuts: string[];
+    sizingNote: string;
+    inseamNote: string;
+  };
+  jackieSays: string;
+}
+
 type VoiceStatus = 'idle' | 'speaking' | 'listening' | 'processing' | 'error';
 
 export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
@@ -49,7 +62,8 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showManualInput, setShowManualInput] = useState(false);
   const [manualText, setManualText] = useState('');
-  const [jackieProfile, setJackieProfile] = useState<any>(null);
+  const [jackieProfile, setJackieProfile] = useState<JackieProfile | null>(null);
+  const [savedProfileId, setSavedProfileId] = useState<string | null>(null);
 
   // Refs for tracking streams and sockets
   const wsRef = useRef<WebSocket | null>(null);
@@ -58,38 +72,32 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const answersRef = useRef<Answers>(answers);
   const isMutedRef = useRef(false);
+  const isUnmountedRef = useRef(false);
 
   // Sync answersRef with answers state to avoid stale closure references in async loops
   useEffect(() => {
     answersRef.current = answers;
   }, [answers]);
 
-  // Start the voice quiz loop once component mounts
-  useEffect(() => {
-    // Wait for user gesture/engagement
-    const initTimer = setTimeout(() => {
-      startVoiceStylist();
-    }, 1000);
-
-    return () => {
-      clearTimeout(initTimer);
-      cleanupStreams();
-    };
-  }, []);
-
   // Main coordinator to start quiz
   const startVoiceStylist = async () => {
     setTranscriptText('Initializing Jackie...');
     const greeting = "Hi there, I'm Jackie, your denim fit stylist. Let's find your perfect pair of jeans, jorts, or loose fits. First, what is your height?";
+    try {
+      await playSpeech(greeting);
+    } catch (e) {
+      console.error(e);
+    }
     startListening(questions[0], 0);
-    playSpeech(greeting).catch(console.error);
   };
 
   // Helper to call ElevenLabs proxy stream and play
   const playSpeech = async (text: string): Promise<void> => {
+    if (isUnmountedRef.current) return;
     setVoiceStatus('speaking');
 
     const speakNatively = (fallbackText: string) => {
+      if (isUnmountedRef.current) return;
       setTranscriptText(`[Jackie]: "${fallbackText}"`);
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         try {
@@ -126,6 +134,8 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
         body: JSON.stringify({ text }),
       });
 
+      if (isUnmountedRef.current) return;
+
       // Handle local text fallback indicator or server error response
       if (!res.ok || res.headers.get('X-Voice-Fallback') === 'true') {
         console.warn('ElevenLabs API unavailable or restricted. Simulating voice using subtitles and browser SpeechSynthesis.');
@@ -137,11 +147,17 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
       }
 
       const audioBlob = await res.blob();
+      if (isUnmountedRef.current) return;
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
       activeAudioRef.current = audio;
 
       return new Promise((resolve, reject) => {
+        if (isUnmountedRef.current) {
+          URL.revokeObjectURL(audioUrl);
+          reject(new Error('Component unmounted'));
+          return;
+        }
         audio.onended = () => {
           URL.revokeObjectURL(audioUrl);
           activeAudioRef.current = null;
@@ -164,6 +180,7 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
 
   // Connect to Deepgram and start microphone recording
   const startListening = async (question: Question, brandIdx: number) => {
+    if (isUnmountedRef.current) return;
     if (isMutedRef.current) return;
     setVoiceStatus('listening');
     setTranscriptText('Listening...');
@@ -258,10 +275,20 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
 
       ws.onerror = (e) => {
         console.error('Deepgram WebSocket error:', e);
+        cleanupStreams();
+        setVoiceStatus('idle');
+        setTranscriptText('Stylist connection error. Tap keyboard to type.');
+        setShowManualInput(true);
       };
 
       ws.onclose = (event) => {
         console.log('Deepgram WebSocket closed. Code:', event.code, 'Reason:', event.reason || 'No reason provided');
+        if (event.code !== 1000 && event.code !== 1005) {
+          cleanupStreams();
+          setVoiceStatus('idle');
+          setTranscriptText('Stylist connection closed. Tap keyboard to type.');
+          setShowManualInput(true);
+        }
       };
 
     } catch (err) {
@@ -290,10 +317,32 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
       wsRef.current = null;
     }
     if (activeAudioRef.current) {
-      activeAudioRef.current.pause();
+      try {
+        activeAudioRef.current.pause();
+      } catch (e) {}
       activeAudioRef.current = null;
     }
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {}
+    }
   };
+
+  // Start the voice quiz loop once component mounts
+  useEffect(() => {
+    isUnmountedRef.current = false;
+    // Wait for user gesture/engagement
+    const initTimer = setTimeout(() => {
+      startVoiceStylist();
+    }, 1000);
+
+    return () => {
+      isUnmountedRef.current = true;
+      clearTimeout(initTimer);
+      cleanupStreams();
+    };
+  }, []);
 
   // Process manual keyboard entry fallback
   const handleManualSubmit = (e: React.FormEvent) => {
@@ -344,20 +393,20 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
 
       if (!result.needsClarification && result.action) {
         // 1. Apply any global state updates
-        let updatedAnswers = { ...answersRef.current };
+        const updatedAnswers = { ...answersRef.current };
         if (result.updates) {
           for (const [key, value] of Object.entries(result.updates)) {
             if (key === 'brandSizes' && activeBrand) {
                // Safely merge brand sizes
                updatedAnswers.brandSizes = {
                  ...updatedAnswers.brandSizes,
-                 [activeBrand]: value as string
+                 [activeBrand]: String(value)
                };
             } else if (key === 'brands' || key === 'frustrations') {
-               updatedAnswers[key] = Array.isArray(value) ? value : [value];
-            } else {
-               // @ts-ignore
-               updatedAnswers[key] = value;
+               updatedAnswers[key] = Array.isArray(value) ? (value as string[]) : [String(value)];
+            } else if (['height', 'weight', 'waist', 'hip', 'waistFit', 'rise', 'thighFit'].includes(key)) {
+               const k = key as 'height' | 'weight' | 'waist' | 'hip' | 'waistFit' | 'rise' | 'thighFit';
+               updatedAnswers[k] = String(value);
             }
           }
           setAnswers(updatedAnswers);
@@ -398,8 +447,12 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
 
       } else {
         // Needs clarification
+        try {
+          await playSpeech(result.clarificationPrompt || "I didn't quite catch that. Could you repeat?");
+        } catch (e) {
+          console.error(e);
+        }
         startListening(question, brandIdx);
-        playSpeech(result.clarificationPrompt || "I didn't quite catch that. Could you repeat?").catch(console.error);
       }
     } catch (err) {
       console.error('Answer processing failed:', err);
@@ -468,8 +521,12 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
     }
 
     setTranscriptText('');
+    try {
+      await playSpeech(queryText);
+    } catch (e) {
+      console.error(e);
+    }
     startListening(question, bIdx);
-    playSpeech(queryText).catch(console.error);
   };
 
   // Save profile server-side on voice flow completion
@@ -514,7 +571,12 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
         })
       ]);
 
-      if (saveRes && !saveRes.ok) {
+      if (saveRes && saveRes.ok) {
+        const saveData = await saveRes.json();
+        if (saveData.success && saveData.id) {
+          setSavedProfileId(saveData.id);
+        }
+      } else if (saveRes && !saveRes.ok) {
         console.warn('DB Save warning in Voice.');
       }
 
@@ -535,21 +597,15 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
     }
   };
 
+  // Redirect to final vercel app with secure opaque profileId
   const handleRedirect = () => {
     const params = new URLSearchParams();
-    params.set('height', answers.height);
-    if (answers.weight) params.set('weight', answers.weight);
-    params.set('waist', answers.waist);
-    params.set('hip', answers.hip);
-    params.set('waistFit', answers.waistFit);
-    params.set('rise', answers.rise);
-    params.set('thighFit', answers.thighFit);
-    params.set('brands', answers.brands.join(','));
-    params.set('brandSizes', JSON.stringify(answers.brandSizes));
-    params.set('frustrations', answers.frustrations.join(','));
-
-    if (jackieProfile && jackieProfile.fitProfile) {
-      params.set('fitProfile', JSON.stringify(jackieProfile.fitProfile));
+    if (savedProfileId) {
+      params.set('profileId', savedProfileId);
+    }
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      params.set('userId', currentUser.uid);
     }
 
     // Use window.location.href for external redirects as Next.js router.push expects internal paths
@@ -697,7 +753,7 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
             Your fit profile is ready.
           </h2>
           <p className="font-body text-xs text-white/50 mb-6 leading-relaxed">
-            Jackie has compiled your metrics and preferences. You're ready to see recommendations.
+            Jackie has compiled your metrics and preferences. You&apos;re ready to see recommendations.
           </p>
 
           {jackieProfile?.jackieSays && (
@@ -845,7 +901,14 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
         {/* Manual Keyboard toggle button */}
         <BubblyButton
           variant="blank"
-          onClick={() => setShowManualInput(!showManualInput)}
+          onClick={() => {
+            const nextVal = !showManualInput;
+            setShowManualInput(nextVal);
+            if (nextVal) {
+              cleanupStreams();
+              setVoiceStatus('idle');
+            }
+          }}
           className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all ${
             showManualInput
               ? 'border-primary/30 bg-primary/10 text-primary'

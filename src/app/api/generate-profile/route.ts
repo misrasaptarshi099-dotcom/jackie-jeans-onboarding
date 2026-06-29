@@ -3,22 +3,37 @@ import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import { rateLimiter } from '@/lib/rate-limiter';
 
+const stringOrNumber = z.union([z.string(), z.number()]).transform(val => String(val));
+
 // Answers schema validation matching the front-end interface structure
 const answersSchema = z.object({
-  height: z.string().min(3).max(10),
-  weight: z.string().max(10).optional(),
-  waist: z.string().min(2).max(10),
-  hip: z.string().min(2).max(10),
+  height: stringOrNumber,
+  weight: stringOrNumber.optional(),
+  waist: stringOrNumber,
+  hip: stringOrNumber,
   waistFit: z.string().min(2).max(30).optional().or(z.literal('')),
   rise: z.string().min(2).max(30).optional().or(z.literal('')),
   thighFit: z.string().min(2).max(30).optional().or(z.literal('')),
   brands: z.array(z.string().max(50)),
-  brandSizes: z.record(z.string(), z.string().max(10)),
+  brandSizes: z.record(z.string(), stringOrNumber),
   frustrations: z.array(z.string().max(50)),
 });
 
 const generateProfileSchema = z.object({
   answers: answersSchema,
+});
+
+const profileResponseSchema = z.object({
+  summary: z.string(),
+  fitProfile: z.object({
+    primaryIssue: z.string(),
+    recommendedRise: z.string(),
+    recommendedCut: z.string(),
+    avoidCuts: z.array(z.string()),
+    sizingNote: z.string(),
+    inseamNote: z.string(),
+  }),
+  jackieSays: z.string(),
 });
 
 export async function POST(req: NextRequest) {
@@ -40,7 +55,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const parsed = generateProfileSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid profile data payload structure' }, { status: 400 });
+      console.error('Validation error in generate-profile:', parsed.error.format());
+      return NextResponse.json({ 
+        error: 'Invalid profile data payload structure', 
+        details: parsed.error.format() 
+      }, { status: 400 });
     }
 
     const { answers } = parsed.data;
@@ -96,11 +115,47 @@ Return ONLY valid JSON, no markdown, no preamble:
 
     const responseText = response.text || '';
     const clean = responseText.replace(/```json|```/g, '').trim();
-    return NextResponse.json(JSON.parse(clean));
-  } catch (err: any) {
+    
+    try {
+      const json = JSON.parse(clean);
+      const parsedRes = profileResponseSchema.safeParse(json);
+      
+      if (!parsedRes.success) {
+        console.error('Gemini output schema mismatch:', parsedRes.error.format());
+        return NextResponse.json({
+          summary: `Based on your height of ${answers.height || "5'6\""} and waist size of ${answers.waist || '28"'}, you have a classic fit. We recommend mid-rise cuts to avoid any gaping at the waistband.`,
+          fitProfile: {
+            primaryIssue: answers.frustrations?.[0] || 'Waist gap',
+            recommendedRise: answers.rise || 'Mid Rise',
+            recommendedCut: 'Straight Cut',
+            avoidCuts: ['Super Skinny'],
+            sizingNote: 'Fits true to size. If between sizes, size down.',
+            inseamNote: '30 inches',
+          },
+          jackieSays: `Based on your metrics, I'd suggest our mid-rise straight cut for a comfortable fit.`,
+        });
+      }
+      
+      return NextResponse.json(parsedRes.data);
+    } catch (parseErr) {
+      console.error('Failed to parse Gemini JSON output:', parseErr);
+      return NextResponse.json({
+        summary: `Based on your height of ${answers.height || "5'6\""} and waist size of ${answers.waist || '28"'}, you have a classic fit. We recommend mid-rise cuts to avoid any gaping at the waistband.`,
+        fitProfile: {
+          primaryIssue: answers.frustrations?.[0] || 'Waist gap',
+          recommendedRise: answers.rise || 'Mid Rise',
+          recommendedCut: 'Straight Cut',
+          avoidCuts: ['Super Skinny'],
+          sizingNote: 'Fits true to size. If between sizes, size down.',
+          inseamNote: '30 inches',
+        },
+        jackieSays: `Based on your metrics, I'd suggest our mid-rise straight cut for a comfortable fit.`,
+      });
+    }
+  } catch (err: unknown) {
     console.error('Error in generate-profile API route:', err);
     return NextResponse.json(
-      { error: err.message || 'Internal Server Error' },
+      { error: 'Internal Server Error' },
       { status: 500 }
     );
   }

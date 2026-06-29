@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion, Variants } from 'framer-motion';
 import { questions, Question } from '@/lib/questions';
 import BubblyButton from '@/components/BubblyButton';
 import { auth } from '@/lib/firebase-client';
@@ -18,6 +18,19 @@ interface Answers {
   brands: string[];
   brandSizes: Record<string, string>;
   frustrations: string[];
+}
+
+export interface JackieProfile {
+  summary: string;
+  fitProfile: {
+    primaryIssue: string;
+    recommendedRise: string;
+    recommendedCut: string;
+    avoidCuts: string[];
+    sizingNote: string;
+    inseamNote: string;
+  };
+  jackieSays: string;
 }
 
 export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
@@ -43,7 +56,8 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [direction, setDirection] = useState<1 | -1>(1); // 1 = forward, -1 = backward
-  const [jackieProfile, setJackieProfile] = useState<any>(null);
+  const [jackieProfile, setJackieProfile] = useState<JackieProfile | null>(null);
+  const [savedProfileId, setSavedProfileId] = useState<string | null>(null);
 
   const currentQuestion = questions[currentIdx];
 
@@ -165,7 +179,12 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
         })
       ]);
 
-      if (saveRes && !saveRes.ok) {
+      if (saveRes && saveRes.ok) {
+        const saveData = await saveRes.json();
+        if (saveData.success && saveData.id) {
+          setSavedProfileId(saveData.id);
+        }
+      } else if (saveRes && !saveRes.ok) {
         console.warn('DB Save Warning: API response not ok.');
       }
 
@@ -186,22 +205,15 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
     }
   };
 
-  // Redirect to final vercel app with serialized answers
+  // Redirect to final vercel app with secure opaque profileId
   const handleRedirect = () => {
     const params = new URLSearchParams();
-    params.set('height', answers.height);
-    if (answers.weight) params.set('weight', answers.weight);
-    params.set('waist', answers.waist);
-    params.set('hip', answers.hip);
-    params.set('waistFit', answers.waistFit);
-    params.set('rise', answers.rise);
-    params.set('thighFit', answers.thighFit);
-    params.set('brands', answers.brands.join(','));
-    params.set('brandSizes', JSON.stringify(answers.brandSizes));
-    params.set('frustrations', answers.frustrations.join(','));
-
-    if (jackieProfile && jackieProfile.fitProfile) {
-      params.set('fitProfile', JSON.stringify(jackieProfile.fitProfile));
+    if (savedProfileId) {
+      params.set('profileId', savedProfileId);
+    }
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      params.set('userId', currentUser.uid);
     }
 
     // Use window.location.href for external redirects as Next.js router.push expects internal paths
@@ -209,7 +221,7 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
   };
 
   // Slide Animation Configurations
-  const slideVariants: any = {
+  const slideVariants: Variants = {
     enter: (dir: number) => ({
       x: shouldReduceMotion ? 0 : dir * 150,
       opacity: 0,
@@ -276,7 +288,7 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
   // Rendering input elements per type
   const renderInput = () => {
     switch (currentQuestion.type) {
-      case 'dropdown':
+      case 'dropdown': {
         const selectValue = answers[currentQuestion.id as keyof Answers] as string;
         return (
           <div className="w-full relative my-8">
@@ -296,6 +308,7 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
             </div>
           </div>
         );
+      }
 
       case 'number':
         return (
@@ -319,7 +332,7 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
           </div>
         );
 
-      case 'card':
+      case 'card': {
         const cardValue = answers[currentQuestion.id as keyof Answers] as string;
         return (
           <div className="w-full flex flex-col gap-3 my-6">
@@ -342,6 +355,7 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
             })}
           </div>
         );
+      }
 
       case 'multi-select':
         if (currentQuestion.id === 'brands') {
@@ -395,7 +409,7 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
           </div>
         );
 
-      case 'dynamic-size':
+      case 'dynamic-size': {
         // Q9: loop through selected brands
         const currentBrand = answers.brands[currentBrandIdx];
         if (!currentBrand) return null;
@@ -427,6 +441,7 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
             </div>
           </div>
         );
+      }
 
       default:
         return null;
@@ -458,7 +473,6 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
 
     // Standard buttons
     const isNextDisabled =
-      (currentQuestion.id === 'brands' && answers.brands.length === 0) ||
       (currentQuestion.id === 'frustrations' && answers.frustrations.length === 0);
 
     const buttonLabel = currentQuestion.id === 'frustrations' ? 'Finish' : 'Next';

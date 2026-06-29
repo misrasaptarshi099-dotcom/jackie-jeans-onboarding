@@ -67,10 +67,10 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ token: tempKey.key });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error generating Deepgram token:', err);
     return NextResponse.json(
-      { error: err.message || 'Internal Server Error' },
+      { error: 'Internal Server Error' },
       { status: 500 }
     );
   }

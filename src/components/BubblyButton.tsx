@@ -3,11 +3,17 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 
-interface BubblyButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface BubblyButtonProps extends React.HTMLAttributes<HTMLElement> {
   children: React.ReactNode;
   className?: string;
   variant?: 'primary' | 'secondary' | 'card' | 'outline' | 'blank';
-  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onClick?: (e: React.MouseEvent<HTMLElement>) => void;
+  disabled?: boolean;
+  as?: 'button' | 'a' | 'div';
+  href?: string;
+  target?: string;
+  rel?: string;
+  type?: 'submit' | 'button' | 'reset';
 }
 
 interface Ripple {
@@ -23,11 +29,12 @@ export default function BubblyButton({
   variant = 'primary',
   onClick,
   disabled,
+  as = 'button',
   ...props
 }: BubblyButtonProps) {
   const [ripples, setRipples] = useState<Ripple[]>([]);
 
-  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleClick = (e: React.MouseEvent<HTMLElement>) => {
     if (disabled) return;
 
     const button = e.currentTarget;
@@ -71,14 +78,16 @@ export default function BubblyButton({
     variantStyles = 'w-full py-4.5 px-6 rounded-xl border text-left font-body text-sm font-semibold transition-all duration-200';
   }
 
+  const MotionComponent = as === 'a' ? motion.a : as === 'div' ? motion.div : motion.button;
+
   return (
-    <motion.button
+    <MotionComponent
       whileHover={disabled ? {} : { scale: 1.03 }}
       whileTap={disabled ? {} : { scale: 0.95 }}
       transition={{ type: 'spring', stiffness: 450, damping: 18 }}
       className={`${baseStyles} ${variantStyles} ${className}`}
       onClick={handleClick}
-      disabled={disabled}
+      {...(as === 'button' ? { disabled } : {})}
       {...(props as any)}
     >
       <span className="relative z-10 flex items-center justify-center gap-2 w-full h-full">
@@ -99,6 +108,6 @@ export default function BubblyButton({
           onAnimationEnd={() => removeRipple(ripple.id)}
         />
       ))}
-    </motion.button>
+    </MotionComponent>
   );
 }

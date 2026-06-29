@@ -28,7 +28,7 @@ function localRegexFallback(
   // Base helper to wrap fallback answers into the new schema
   const wrapFallback = (
     fieldId: string,
-    value: any,
+    value: unknown,
     displayText: string,
     needsClarification: boolean = false,
     clarificationPrompt: string = ''
@@ -84,7 +84,7 @@ function localRegexFallback(
     if (options && options.includes(formatted)) {
       return wrapFallback(questionId, formatted, `Got it, ${feet} foot ${inches}.`);
     }
-    return wrapFallback(questionId, "5'6\"", 'Okay, five foot six.');
+    return wrapFallback(questionId, null, '', true, 'Sorry, what was your height? For example, five foot six.');
   }
 
   if (questionId === 'weight') {
@@ -101,8 +101,10 @@ function localRegexFallback(
       const formatted = `${numMatch[0]}"`;
       return wrapFallback(questionId, formatted, `Understood, ${numMatch[0]} inches.`);
     }
-    const def = questionId === 'waist' ? '28"' : '38"';
-    return wrapFallback(questionId, def, `Okay, ${def.replace('"', '')} inches.`);
+    const prompt = questionId === 'waist'
+      ? 'Sorry, what is your waist size in inches? For example, twenty eight inches.'
+      : 'Sorry, what is your hip size in inches? For example, thirty eight inches.';
+    return wrapFallback(questionId, null, '', true, prompt);
   }
 
   if (['waistFit', 'rise', 'thighFit'].includes(questionId) && options) {
@@ -112,7 +114,7 @@ function localRegexFallback(
         return wrapFallback(questionId, opt, `Got it, ${opt}.`);
       }
     }
-    return wrapFallback(questionId, options[0], `Okay, ${options[0]}.`);
+    return wrapFallback(questionId, null, '', true, 'Sorry, could you choose from the options? E.g., snug, relaxed.');
   }
 
   if (questionId === 'brands' && options) {
@@ -128,7 +130,7 @@ function localRegexFallback(
     if (matched.length > 0) {
       return wrapFallback(questionId, matched, `Recorded ${matched.join(' and ')}.`);
     }
-    return wrapFallback(questionId, ["Levi's"], "Got it, Levi's.");
+    return wrapFallback(questionId, null, '', true, 'Sorry, which denim brands have you bought before?');
   }
 
   if (questionId === 'brandSizes' && options) {
@@ -136,7 +138,7 @@ function localRegexFallback(
     if (num) {
       return wrapFallback(questionId, num[0], `Size ${num[0]} in ${activeBrand || 'denim'}.`);
     }
-    return wrapFallback(questionId, '28', `Okay, size 28 in ${activeBrand || 'denim'}.`);
+    return wrapFallback(questionId, null, '', true, `Sorry, what size did you wear in ${activeBrand || 'that brand'}?`);
   }
 
   if (questionId === 'frustrations' && options) {
@@ -150,7 +152,7 @@ function localRegexFallback(
     if (matched.length > 0) {
       return wrapFallback(questionId, matched, `Understood, struggling with ${matched.join(', ')}.`);
     }
-    return wrapFallback(questionId, ['Waist gap'], 'Got it, waist gap.');
+    return wrapFallback(questionId, null, '', true, 'Sorry, what is your biggest fit frustration when buying denim?');
   }
 
   return wrapFallback(questionId, null, '', true, "Sorry, could you repeat that? I didn't quite catch your answer.");
@@ -171,14 +173,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  let parsedBody: any = null;
   try {
     const body = await req.json();
+    parsedBody = body;
     const parsed = requestSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid input payload' }, { status: 400 });
     }
 
-    const { transcript, questionId, questionType, options, optional, activeBrand, answersState, allQuestions } = parsed.data;
+    const { transcript, questionId, questionType, options, optional, activeBrand, answersState } = parsed.data;
 
     // Retrieve Gemini API Key
     const apiKey = process.env.GEMINI_API_KEY;
@@ -244,9 +248,22 @@ Analyze the transcript and return the JSON response. Do not include any markdown
     
     try {
       const parsedJson = JSON.parse(responseText);
-      return NextResponse.json(parsedJson);
+      const geminiResponseSchema = z.object({
+        updates: z.record(z.string(), z.any()).optional().default({}),
+        action: z.enum(['NEXT', 'PREVIOUS', 'REPEAT', 'STAY']),
+        displayText: z.string(),
+        needsClarification: z.boolean().optional().default(false),
+        clarificationPrompt: z.string().optional().default(''),
+      });
+      const validated = geminiResponseSchema.safeParse(parsedJson);
+      if (!validated.success) {
+        console.error('Gemini output failed validation. Falling back to local regex matching.');
+        const fallbackResult = localRegexFallback(transcript, questionId, questionType, options, optional, activeBrand);
+        return NextResponse.json(fallbackResult);
+      }
+      return NextResponse.json(validated.data);
     } catch (parseError) {
-      console.error('Failed to parse Gemini JSON output. Raw text:', responseText);
+      console.error('Failed to parse Gemini JSON output. Raw text:', responseText, parseError);
       // Fallback if Gemini fails to output valid JSON
       const fallbackResult = localRegexFallback(
         transcript,
@@ -258,17 +275,19 @@ Analyze the transcript and return the JSON response. Do not include any markdown
       );
       return NextResponse.json(fallbackResult);
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error processing answer with Gemini, falling back to regex:', err);
     // Always fall back to local regex instead of returning 500
-    const body = await req.clone().json().catch(() => ({}));
+    const transcriptStr = parsedBody?.transcript || '';
+    const qId = parsedBody?.questionId || '';
+    const qType = parsedBody?.questionType || '';
     const fallbackResult = localRegexFallback(
-      body.transcript || '',
-      body.questionId || '',
-      body.questionType || '',
-      body.options,
-      body.optional,
-      body.activeBrand
+      transcriptStr,
+      qId,
+      qType,
+      parsedBody?.options,
+      parsedBody?.optional,
+      parsedBody?.activeBrand
     );
     return NextResponse.json(fallbackResult);
   }

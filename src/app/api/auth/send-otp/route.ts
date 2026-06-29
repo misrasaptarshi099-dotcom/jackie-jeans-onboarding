@@ -10,7 +10,8 @@ const sendOtpSchema = z.object({
 });
 
 function hashOtp(code: string): string {
-  return crypto.createHash('sha256').update(code).digest('hex');
+  const pepper = process.env.OTP_PEPPER || 'jackie-jeans-secret-otp-pepper';
+  return crypto.createHmac('sha256', pepper).update(code).digest('hex');
 }
 
 export async function POST(req: NextRequest) {
@@ -52,15 +53,18 @@ export async function POST(req: NextRequest) {
     const emailUser = process.env.EMAIL_USER;
     const emailPass = process.env.EMAIL_PASS;
 
-    // Console fallback if Nodemailer details are not configured yet
+    // Console fallback if Nodemailer details are not configured yet (gated to local development)
     if (!emailUser || !emailPass) {
-      console.warn('EMAIL_USER or EMAIL_PASS not configured in .env.local.');
-      console.log(`\n============================================\n[DEVELOPMENT FALLBACK] OTP Code for ${normalizedEmail}: ${code}\n============================================\n`);
-      return NextResponse.json({
-        success: true,
-        fallback: true,
-        message: 'OTP logged to server console (development mode).',
-      });
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('EMAIL_USER or EMAIL_PASS not configured in .env.local.');
+        console.log(`\n============================================\n[DEVELOPMENT FALLBACK] OTP Code for ${normalizedEmail}: ${code}\n============================================\n`);
+        return NextResponse.json({
+          success: true,
+          fallback: true,
+          message: 'OTP logged to server console (development mode).',
+        });
+      }
+      return NextResponse.json({ error: 'Mail delivery service misconfigured' }, { status: 500 });
     }
 
     // Send email using Gmail Nodemailer transport
@@ -92,8 +96,8 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error in send-otp API route:', err);
-    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

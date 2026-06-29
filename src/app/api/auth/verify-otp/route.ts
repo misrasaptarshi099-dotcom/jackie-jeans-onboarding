@@ -9,7 +9,8 @@ const verifyOtpSchema = z.object({
 });
 
 function hashOtp(code: string): string {
-  return crypto.createHash('sha256').update(code).digest('hex');
+  const pepper = process.env.OTP_PEPPER || 'jackie-jeans-secret-otp-pepper';
+  return crypto.createHmac('sha256', pepper).update(code).digest('hex');
 }
 
 export async function POST(req: NextRequest) {
@@ -23,19 +24,21 @@ export async function POST(req: NextRequest) {
     const { email, otp } = parsed.data;
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Mock Fallback if Firebase Service Account credentials are not configured
+    // Mock Fallback if Firebase Service Account credentials are not configured (gated to development)
     if (!db || !auth) {
-      console.warn('Firebase Admin SDK is not initialized. Using mock verify credentials.');
-      if (otp === '123456' || otp === '000000') { // Let 123456 or 000000 work locally
-        return NextResponse.json({
-          success: true,
-          customToken: 'mock_custom_token',
-          uid: 'mock_uid_123456',
-          message: 'Authenticated in development mock mode.',
-        });
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Firebase Admin SDK is not initialized. Using mock verify credentials.');
+        if (otp === '123456' || otp === '000000') { // Let 123456 or 000000 work locally
+          return NextResponse.json({
+            success: true,
+            customToken: 'mock_custom_token',
+            uid: 'mock_uid_123456',
+            message: 'Authenticated in development mock mode.',
+          });
+        }
+        return NextResponse.json({ error: 'Incorrect code. In mock dev mode, use 123456.' }, { status: 400 });
       }
-      // Simple match for console OTP testing: if local database has it or we bypass it
-      return NextResponse.json({ error: 'Incorrect code. In mock dev mode, use 123456.' }, { status: 400 });
+      return NextResponse.json({ error: 'Database service unavailable' }, { status: 500 });
     }
 
     // 1. Retrieve stored OTP document
@@ -93,8 +96,8 @@ export async function POST(req: NextRequest) {
       customToken,
       uid,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error verifying OTP code:', err);
-    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

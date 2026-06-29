@@ -10,6 +10,16 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+const isConfigValid = !!(
+  firebaseConfig.apiKey &&
+  firebaseConfig.projectId &&
+  firebaseConfig.appId
+);
+
+if (!isConfigValid) {
+  throw new Error('Missing Firebase Client configuration environment variables (NEXT_PUBLIC_FIREBASE_*). Check your .env.local file.');
+}
+
 // Initialize Firebase App client-side
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 

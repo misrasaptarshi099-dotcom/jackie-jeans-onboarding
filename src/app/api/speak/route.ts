@@ -42,43 +42,51 @@ export async function POST(req: NextRequest) {
     const voiceId = 'EXAVITQu4vr4xnSDxMaL'; // Sarah (Premade, free-tier eligible female voice)
     const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'xi-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        text: parsed.data.text,
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': apiKey,
         },
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('ElevenLabs API error response:', errorText);
-      console.warn('Falling back to local client text synthesis simulation.');
-      return new Response(JSON.stringify({ fallback: true, error: 'ElevenLabs API Error' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', 'X-Voice-Fallback': 'true' },
+        body: JSON.stringify({
+          text: parsed.data.text,
+          model_id: 'eleven_multilingual_v2',
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75,
+          },
+        }),
+        signal: controller.signal,
       });
-    }
 
-    // Stream the raw audio data back to the client
-    const audioBuffer = await response.arrayBuffer();
-    return new Response(audioBuffer, {
-      headers: {
-        'Content-Type': 'audio/mpeg',
-        'Cache-Control': 'no-cache',
-      },
-    });
-  } catch (err: any) {
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('ElevenLabs API error response:', errorText);
+        console.warn('Falling back to local client text synthesis simulation.');
+        return new Response(JSON.stringify({ fallback: true, error: 'ElevenLabs API Error' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'X-Voice-Fallback': 'true' },
+        });
+      }
+
+      // Stream the raw audio data back to the client
+      const audioBuffer = await response.arrayBuffer();
+      return new Response(audioBuffer, {
+        headers: {
+          'Content-Type': 'audio/mpeg',
+          'Cache-Control': 'no-cache',
+        },
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch (err: unknown) {
     console.error('Error proxying ElevenLabs TTS:', err);
-    return new Response(JSON.stringify({ fallback: true, error: err.message }), {
+    return new Response(JSON.stringify({ fallback: true, error: 'Internal Server Error' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json', 'X-Voice-Fallback': 'true' },
     });

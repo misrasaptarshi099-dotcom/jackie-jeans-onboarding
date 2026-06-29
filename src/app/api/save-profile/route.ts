@@ -3,17 +3,18 @@ import { z } from 'zod';
 import { db, auth } from '@/lib/firebase-admin';
 import { rateLimiter } from '@/lib/rate-limiter';
 
-// Strict input validation schema to prevent script injection and malformed inputs
+const stringOrNumber = z.union([z.string(), z.number()]).transform(val => String(val));
+
 const profileSchema = z.object({
-  height: z.string().min(3).max(10),
-  weight: z.string().max(10).optional(),
-  waist: z.string().min(2).max(10),
-  hip: z.string().min(2).max(10),
+  height: stringOrNumber,
+  weight: stringOrNumber.optional(),
+  waist: stringOrNumber,
+  hip: stringOrNumber,
   waistFit: z.string().min(2).max(30).optional().or(z.literal('')),
   rise: z.string().min(2).max(30).optional().or(z.literal('')),
   thighFit: z.string().min(2).max(30).optional().or(z.literal('')),
   brands: z.array(z.string().max(50)),
-  brandSizes: z.record(z.string(), z.string().max(10)),
+  brandSizes: z.record(z.string(), stringOrNumber),
   frustrations: z.array(z.string().max(50)),
 });
 
@@ -36,7 +37,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const parsed = profileSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid profile data payload' }, { status: 400 });
+      console.error('Validation error in save-profile:', parsed.error.format());
+      return NextResponse.json({ 
+        error: 'Invalid profile data payload', 
+        details: parsed.error.format() 
+      }, { status: 400 });
     }
 
     const fitData = parsed.data;
@@ -57,6 +62,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Restrict saving to authenticated users only to enforce limits
+    if (!userId) {
+      return NextResponse.json({
+        success: true,
+        message: 'Guest profile not persisted in database (success).',
+      });
+    }
+
     // Check if Firestore connection is initialized
     if (!db) {
       console.warn(
@@ -73,12 +86,14 @@ export async function POST(req: NextRequest) {
     // Firestore rejects undefined values, so we sanitize the object first
     const sanitizedData = JSON.parse(JSON.stringify(fitData));
 
-    // Handle FIFO 3-Quiz Limit for Authenticated Users
-    const targetUserId = userId || 'guest';
-    const quizzesCollection = db.collection('fit_profiles').doc(targetUserId).collection('quizzes');
+    // Handle FIFO 3-Quiz Limit for Authenticated Users atomically
+    const targetUserId = userId;
+    const userDocRef = db.collection('fit_profiles').doc(targetUserId);
+    const quizzesCollection = userDocRef.collection('quizzes');
 
-    if (userId) {
-      const snapshot = await quizzesCollection.get();
+    let newDocId = '';
+    await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(quizzesCollection);
 
       if (snapshot.size >= 3) {
         // Sort in memory to avoid composite index requirements
@@ -90,31 +105,30 @@ export async function POST(req: NextRequest) {
 
         // We need to delete the oldest (snapshot.size - 2) quizzes to make room for the 3rd
         const deleteCount = snapshot.size - 2;
-        const batch = db.batch();
         for (let i = 0; i < deleteCount; i++) {
-          batch.delete(docs[i].ref);
+          transaction.delete(docs[i].ref);
         }
-        await batch.commit();
-        console.log(`Deleted ${deleteCount} old quizzes for user ${userId} to maintain 3-quiz FIFO limit.`);
+        console.log(`Deleting ${deleteCount} old quizzes for user ${userId} inside transaction to maintain 3-quiz FIFO limit.`);
       }
-    }
-    
-    // Save to Firestore nested quizzes collection
-    const docRef = await quizzesCollection.add({
-      ...sanitizedData,
-      createdAt: new Date(),
-    });
 
-    console.log(`Saved fit profile successfully in Firestore. DocID: ${docRef.id}`);
+      const newDocRef = quizzesCollection.doc();
+      newDocId = newDocRef.id;
+      transaction.set(newDocRef, {
+        ...sanitizedData,
+        createdAt: new Date(),
+      });
+    });
+    
+    console.log(`Saved fit profile successfully in Firestore. DocID: ${newDocId}`);
 
     return NextResponse.json({
       success: true,
-      id: docRef.id,
+      id: newDocId,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error saving fit profile in API route:', err);
     return NextResponse.json(
-      { error: err.message || 'Internal Server Error' },
+      { error: 'Internal Server Error' },
       { status: 500 }
     );
   }

@@ -1,36 +1,24 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Jackie Jeans Sizing & Fit Advisor
 
-## Getting Started
+Jackie Jeans is a conversational voice AI and manual styling questionnaire built to analyze user measurements and preferences, generate a customized fit profile via Gemini, and persist the results in Firestore.
 
-First, run the development server:
+## Features
+- **Conversational Voice AI**: Speak directly to Jackie, powered by Deepgram for low-latency streaming transcription and ElevenLabs for text-to-speech.
+- **Manual Sizing Questionnaire**: Multi-step interactive flow with custom BubblyButton animations and Lenis smooth scrolling.
+- **Dynamic Fit Profiler**: Integrates Gemini 3.1 Flash Lite to parse transcripts, extract details, and output structured fit summaries.
+- **Secure Persistence**: Stores profiles in Firestore under verified user sessions with atomic 3-quiz FIFO limits.
+- **Rate-Limited Actions**: Uses custom token buckets to throttle abuse.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+---
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Directory Structure
+- `src/app/`: Next.js App Router folders.
+  - `src/app/page.tsx`: Landing page.
+  - `src/app/quiz/page.tsx`: Manual quiz flow page.
+  - `src/app/voice/page.tsx`: Voice AI styling page.
+  - `src/app/signin/page.tsx`: One-time password (OTP) email login.
+  - `src/app/profile/page.tsx`: Historical log of saved user profiles.
+  - `src/app/api/`: REST endpoints for Deepgram token, ElevenLabs TTS, answer processing, and Firebase operations.
+- `src/components/`: Shared UI components (BubblyButton, TextPressure, LenisScroller, GlassSurface).
+- `src/lib/`: Client and Admin Firebase initializers, rate limiter, and questionnaire configuration.

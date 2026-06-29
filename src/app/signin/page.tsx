@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,11 +17,12 @@ export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const isSigningInRef = useRef(false);
 
   // Redirect if already authenticated
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
+      if (user && !isSigningInRef.current) {
         router.push('/');
       }
     });
@@ -87,6 +88,7 @@ export default function SignInPage() {
         throw new Error(data.error || 'Verification failed.');
       }
 
+      isSigningInRef.current = true;
       // Log in on client using Custom Token
       await signInWithCustomToken(auth, data.customToken);
       
@@ -94,14 +96,19 @@ export default function SignInPage() {
       const user = auth.currentUser;
       if (user) {
         const idToken = await user.getIdToken();
-        await fetch('/api/init-profile', {
+        const initRes = await fetch('/api/init-profile', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${idToken}` }
-        }).catch(console.error);
+        });
+        if (!initRes.ok) {
+          await auth.signOut();
+          throw new Error('Failed to initialize profile document. Please try again.');
+        }
       }
 
       router.push('/');
     } catch (err: any) {
+      isSigningInRef.current = false;
       setErrorMsg(err.message || 'Verification failed. Please try again.');
     } finally {
       setIsLoading(false);
@@ -114,23 +121,29 @@ export default function SignInPage() {
     setSuccessMsg('');
 
     try {
+      isSigningInRef.current = true;
       await signInWithPopup(auth, googleProvider);
       
       const user = auth.currentUser;
       if (user) {
         const idToken = await user.getIdToken();
-        await fetch('/api/init-profile', {
+        const initRes = await fetch('/api/init-profile', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${idToken}` }
-        }).catch(console.error);
+        });
+        if (!initRes.ok) {
+          await auth.signOut();
+          throw new Error('Failed to initialize profile document. Please try again.');
+        }
       }
 
       router.push('/');
     } catch (err: any) {
+      isSigningInRef.current = false;
       console.error('Google Sign-In failed:', err);
       // Suppress showing standard cancellation error
       if (err.code !== 'auth/popup-closed-by-user') {
-        setErrorMsg('Google login failed. Please try again.');
+        setErrorMsg(err.message || 'Google login failed. Please try again.');
       }
     } finally {
       setIsLoading(false);
