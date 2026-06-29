@@ -139,12 +139,7 @@ export default function ProfilePage() {
                 transition={{ delay: i * 0.1, duration: 0.5 }}
                 className="bg-white/[0.02] backdrop-blur-xl border border-white/[0.08] rounded-[32px] p-8 hover:border-primary/30 transition-all duration-300 relative overflow-hidden group shadow-[0_8px_32px_rgba(0,0,0,0.2)] hover:shadow-[0_16px_48px_rgba(200,169,110,0.1)]"
               >
-                {/* Decorative background geometry */}
-                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-15 transition-opacity duration-300 pointer-events-none">
-                  <svg width="100" height="100" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2L20 6V18L12 22L4 18V6L12 2ZM12 4.2L6 7.2V16.8L12 19.8L18 16.8V7.2L12 4.2Z" />
-                  </svg>
-                </div>
+
                 
                 {/* Top header within card */}
                 <div className="text-xs text-white/40 font-semibold mb-6 flex items-center justify-between">
