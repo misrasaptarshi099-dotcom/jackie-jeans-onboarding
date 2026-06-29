@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Jackie Jeans - AI Fit Assistant",
+  title: "Jackie Fit",
   description: "A premium, conversational voice AI fit advisor that helps you find your perfect jeans size instantly.",
 };
 
