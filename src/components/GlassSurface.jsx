@@ -120,27 +120,26 @@ const GlassSurface = ({
     setTimeout(updateDisplacementMap, 0);
   }, [width, height]);
 
-  useEffect(() => {
-    setSvgSupported(supportsSVGFilters());
-  }, []);
-
   const supportsSVGFilters = () => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
       return false;
     }
-
-    const isWebkit = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
-    const isFirefox = /Firefox/.test(navigator.userAgent);
-
-    if (isWebkit || isFirefox) {
-      return false;
-    }
-
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    if (isSafari) return true;
     const div = document.createElement('div');
-    div.style.backdropFilter = `url(#${filterId})`;
-
+    div.style.cssText = 'backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);';
+    document.body.appendChild(div);
+    const supported =
+      window.getComputedStyle(div).backdropFilter !== 'none' ||
+      window.getComputedStyle(div).webkitBackdropFilter !== 'none';
+    document.body.removeChild(div);
+    if (supported) return true;
     return div.style.backdropFilter !== '';
   };
+
+  useEffect(() => {
+    setSvgSupported(supportsSVGFilters());
+  }, []);
 
   const containerStyle = {
     ...style,

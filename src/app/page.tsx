@@ -3,9 +3,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useMotionValueEvent } from 'framer-motion';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import BubblyButton from '@/components/BubblyButton';
 import SplitText from '@/components/SplitText';
 import LogoLoop from '@/components/LogoLoop';
+import CardNav from '@/components/CardNav';
+import SeamlessVideo from '@/components/SeamlessVideo';
 
 import ManualQuiz from './quiz/page';
 import VoiceQuiz from './voice/page';
@@ -47,6 +50,15 @@ export default function LandingPage() {
   const [activeOverlay, setActiveOverlay] = useState<'none' | 'quiz' | 'voice'>('none');
   const [statTriggered, setStatTriggered] = useState(false);
   const [navHidden, setNavHidden] = useState(false);
+  const router = useRouter();
+
+  const handleOpenOverlay = (type: 'quiz' | 'voice') => {
+    if (user) {
+      setActiveOverlay(type);
+    } else {
+      router.push('/signin');
+    }
+  };
   
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -156,13 +168,13 @@ export default function LandingPage() {
         transition={{ duration: 0.35, ease: 'easeInOut' }}
         className="fixed top-0 left-0 w-full z-50 px-4 md:px-8 py-3"
       >
-        <div className="max-w-7xl mx-auto bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] rounded-full px-8 py-3 flex items-center justify-between shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+        <div className="hidden md:flex max-w-7xl mx-auto bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] rounded-full px-8 py-3 items-center justify-between shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
           <Link href="/" className="font-display text-xl text-primary font-bold tracking-[0.15em] uppercase">
             Jackie
           </Link>
-          <nav className="hidden md:flex items-center gap-8 text-[11px] font-body text-white/60 tracking-widest font-semibold uppercase">
-            <button onClick={() => setActiveOverlay('quiz')} className="hover:text-primary transition-colors duration-300 cursor-pointer">Fit Quiz</button>
-            <button onClick={() => setActiveOverlay('voice')} className="hover:text-primary transition-colors duration-300 cursor-pointer">Voice AI</button>
+          <nav className="hidden md:flex items-center gap-8 text-[11px] font-body text-white/60 tracking-widest font-semibold">
+            <button onClick={() => handleOpenOverlay('quiz')} className="hover:text-primary transition-colors duration-300 cursor-pointer">Fit Quiz</button>
+            <button onClick={() => handleOpenOverlay('voice')} className="hover:text-primary transition-colors duration-300 cursor-pointer">Voice AI</button>
             {user ? (
         <div className="flex items-center gap-8">
           <Link href="/profile" className="hover:text-primary transition-colors duration-300 cursor-pointer">My Profile</Link>
@@ -172,24 +184,53 @@ export default function LandingPage() {
             )}
           </nav>
         </div>
+
+        <CardNav
+          items={[
+            {
+              label: 'Fit Quiz',
+              description: 'Tap through 10 quick questions',
+              bgColor: '#1a1a1a',
+              textColor: '#fff',
+              onClick: () => handleOpenOverlay('quiz')
+            },
+            {
+              label: 'Voice Mode',
+              description: 'Speak naturally to your stylist',
+              bgColor: '#222222',
+              textColor: '#fff',
+              onClick: () => handleOpenOverlay('voice')
+            },
+            ...(user ? [{
+              label: 'My Profile',
+              description: 'View your saved sizing',
+              bgColor: '#111111',
+              textColor: '#e5c487',
+              href: '/profile'
+            }] : [])
+          ]}
+          authSlot={
+            user ? (
+              <button onClick={handleSignOut} className="card-nav-signin">
+                Sign Out
+              </button>
+            ) : (
+              <Link href="/signin" className="card-nav-signin">
+                Sign In
+              </Link>
+            )
+          }
+        />
       </motion.header>
 
       {/* HERO */}
       <section className="section w-full relative flex flex-col justify-end p-8 md:p-16 min-h-screen">
         <motion.div style={{ y: heroY, opacity: heroOpacity }} className="absolute inset-0 z-0">
-          <video
-            className="w-full h-full object-cover scale-105"
+          <SeamlessVideo
             src="/hero.mp4"
-            autoPlay loop muted playsInline
-            onError={(e) => {
-              (e.target as HTMLVideoElement).style.display = 'none';
-              const parent = (e.target as HTMLElement).parentElement;
-              if (parent) {
-                parent.style.backgroundImage = `url('/images/cropped.png')`;
-                parent.style.backgroundSize = 'cover';
-                parent.style.backgroundPosition = 'center';
-              }
-            }}
+            className="w-full h-full"
+            fadeDuration={1.5}
+            fallbackImage="/images/cropped.png"
           />
         </motion.div>
         <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#131313] via-black/40 to-transparent" />
@@ -220,27 +261,16 @@ export default function LandingPage() {
             transition={{ delay: 0.3, duration: 0.8, ease: "easeOut" }}
             className="flex flex-col sm:flex-row w-full sm:w-auto gap-5 justify-start items-center"
           >
-            {user ? (
-              <BubblyButton
-                variant="primary"
-                onClick={() => setActiveOverlay('quiz')}
-                className="!w-64 !h-14 !rounded-full !border-0 text-xs tracking-widest font-bold"
-              >
-                TAKE THE QUIZ
-              </BubblyButton>
-            ) : (
-              <Link href="/signin">
-                <BubblyButton
-                  variant="primary"
-                  className="!w-64 !h-14 !rounded-full !border-0 text-xs tracking-widest font-bold"
-                >
-                  TAKE THE QUIZ
-                </BubblyButton>
-              </Link>
-            )}
+            <BubblyButton
+              variant="primary"
+              onClick={() => handleOpenOverlay('quiz')}
+              className="!w-64 !h-14 !rounded-full !border-0 text-xs tracking-widest font-bold"
+            >
+              TAKE THE QUIZ
+            </BubblyButton>
             <BubblyButton
               variant="secondary"
-              onClick={() => setActiveOverlay('voice')}
+              onClick={() => handleOpenOverlay('voice')}
               className="!w-64 !h-14 !rounded-full !border-white/20 !bg-white/5 hover:!bg-white/10 !backdrop-blur-sm text-xs tracking-widest font-bold"
             >
               <svg className="w-4 h-4 fill-current mr-2" viewBox="0 0 24 24">
@@ -403,7 +433,7 @@ export default function LandingPage() {
             {/* Manual Quiz Card */}
             <motion.div
               initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} viewport={{ once: true }}
-              onClick={() => setActiveOverlay('quiz')}
+              onClick={() => handleOpenOverlay('quiz')}
               className="w-full md:w-1/2 bg-white/[0.03] backdrop-blur-sm border border-white/[0.08] hover:border-primary/40 rounded-3xl p-8 md:p-10 flex flex-col items-center text-center cursor-pointer transition-all duration-500 hover:bg-white/[0.06] hover:-translate-y-2 group"
             >
               <div className="w-16 h-16 rounded-full bg-black/40 border border-primary/30 text-primary flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-primary group-hover:text-black transition-all duration-300">
@@ -423,7 +453,7 @@ export default function LandingPage() {
             {/* Voice Mode Card */}
             <motion.div
               initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }} viewport={{ once: true }}
-              onClick={() => setActiveOverlay('voice')}
+              onClick={() => handleOpenOverlay('voice')}
               className="w-full md:w-1/2 bg-white/[0.03] backdrop-blur-sm border border-white/[0.08] hover:border-primary/40 rounded-3xl p-8 md:p-10 flex flex-col items-center text-center cursor-pointer transition-all duration-500 hover:bg-white/[0.06] hover:-translate-y-2 group"
             >
               <div className="w-16 h-16 rounded-full bg-black/40 border border-primary/30 text-primary flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-primary group-hover:text-black transition-all duration-300">
@@ -467,23 +497,12 @@ export default function LandingPage() {
             Takes less than 3 minutes.
           </motion.p>
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
-            {user ? (
-              <BubblyButton onClick={() => setActiveOverlay('quiz')} variant="primary" className="!w-64 !h-14 group text-xs font-bold tracking-widest">
-                <span className="flex items-center justify-center gap-2">
-                  FIND MY FIT
-                  <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
-                </span>
-              </BubblyButton>
-            ) : (
-              <Link href="/signin">
-                <BubblyButton variant="primary" className="!w-64 !h-14 group text-xs font-bold tracking-widest">
-                  <span className="flex items-center justify-center gap-2">
-                    FIND MY FIT
-                    <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
-                  </span>
-                </BubblyButton>
-              </Link>
-            )}
+            <BubblyButton onClick={() => handleOpenOverlay('quiz')} variant="primary" className="!w-64 !h-14 group text-xs font-bold tracking-widest">
+              <span className="flex items-center justify-center gap-2">
+                FIND MY FIT
+                <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
+              </span>
+            </BubblyButton>
           </motion.div>
         </div>
       </section>

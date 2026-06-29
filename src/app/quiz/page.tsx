@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion, Variants } from 'framer-motion';
 import { questions, Question } from '@/lib/questions';
@@ -55,9 +55,20 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [direction, setDirection] = useState<1 | -1>(1); // 1 = forward, -1 = backward
   const [jackieProfile, setJackieProfile] = useState<JackieProfile | null>(null);
   const [savedProfileId, setSavedProfileId] = useState<string | null>(null);
+  const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup auto-advance timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+      }
+    };
+  }, []);
 
   const currentQuestion = questions[currentIdx];
 
@@ -102,6 +113,11 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
   };
 
   const handleBack = () => {
+    // Cancel any pending auto-advance timer
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
     setDirection(-1);
 
     // Q10 -> Q9 transition
@@ -141,7 +157,12 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
 
   // Submit answers to server side, then complete
   const handleSubmit = async () => {
+    if (isSubmitting) return; // Re-entry guard
     setIsSubmitting(true);
+    setSubmitError(null);
+
+    let profileGenerated = false;
+
     try {
       // Fetch user ID Token if logged in
       const currentUser = auth.currentUser;
@@ -191,6 +212,7 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
       if (profileRes && profileRes.ok) {
         const profileData = await profileRes.json();
         setJackieProfile(profileData);
+        profileGenerated = true;
         try {
           localStorage.setItem('jackieProfile', JSON.stringify(profileData));
         } catch (e) {
@@ -201,7 +223,11 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
       console.error('Unhandled error during submission:', err);
     } finally {
       setIsSubmitting(false);
-      setIsCompleted(true);
+      if (profileGenerated) {
+        setIsCompleted(true);
+      } else {
+        setSubmitError('Profile generation failed. Please try again.');
+      }
     }
   };
 
@@ -210,10 +236,6 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
     const params = new URLSearchParams();
     if (savedProfileId) {
       params.set('profileId', savedProfileId);
-    }
-    const currentUser = auth.currentUser;
-    if (currentUser) {
-      params.set('userId', currentUser.uid);
     }
 
     // Use window.location.href for external redirects as Next.js router.push expects internal paths
@@ -246,8 +268,13 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
     }));
     // Auto-advance for cards (fit, rise, thigh) since they are single tap selection
     if (['waistFit', 'rise', 'thighFit'].includes(id)) {
+      // Cancel any existing pending auto-advance timer
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+      }
       // Small timeout for user visual feedback before moving on
-      setTimeout(() => {
+      autoAdvanceTimerRef.current = setTimeout(() => {
+        autoAdvanceTimerRef.current = null;
         setDirection(1);
         setCurrentIdx((prevIdx) => prevIdx + 1);
       }, 200);
@@ -644,6 +671,19 @@ export default function ManualQuiz({ onClose }: { onClose?: () => void }) {
           <span className="font-body text-xs text-white/70 mt-4 tracking-wider uppercase font-semibold">
             Calibrating Your Fit...
           </span>
+        </div>
+      )}
+
+      {/* Submit Error Banner */}
+      {submitError && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-red-900/90 text-white px-6 py-3 rounded-xl font-body text-xs flex items-center gap-3 shadow-lg">
+          <span>{submitError}</span>
+          <button
+            onClick={handleSubmit}
+            className="text-primary font-semibold uppercase tracking-wider hover:underline cursor-pointer"
+          >
+            Retry
+          </button>
         </div>
       )}
 

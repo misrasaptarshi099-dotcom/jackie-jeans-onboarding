@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db, auth } from '@/lib/firebase-admin';
 import { rateLimiter } from '@/lib/rate-limiter';
 
-const stringOrNumber = z.union([z.string(), z.number()]).transform(val => String(val));
+const stringOrNumber = z.union([z.string().max(10), z.number()]).transform(val => String(val));
 
 const profileSchema = z.object({
   height: stringOrNumber,
@@ -13,9 +13,9 @@ const profileSchema = z.object({
   waistFit: z.string().min(2).max(30).optional().or(z.literal('')),
   rise: z.string().min(2).max(30).optional().or(z.literal('')),
   thighFit: z.string().min(2).max(30).optional().or(z.literal('')),
-  brands: z.array(z.string().max(50)),
-  brandSizes: z.record(z.string(), stringOrNumber),
-  frustrations: z.array(z.string().max(50)),
+  brands: z.array(z.string().max(50)).max(15),
+  brandSizes: z.record(z.string().max(50), stringOrNumber),
+  frustrations: z.array(z.string().max(50)).max(15),
 });
 
 export async function POST(req: NextRequest) {

@@ -1,0 +1,196 @@
+.card-nav-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  z-index: 99;
+  box-sizing: border-box;
+  padding: 0.75rem 1rem;
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .card-nav-container {
+    display: block;
+  }
+}
+
+.card-nav {
+  display: block;
+  height: 56px;
+  padding: 0;
+  background-color: rgba(19, 19, 19, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  position: relative;
+  overflow: hidden;
+  will-change: height;
+}
+
+.card-nav-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.75rem 0 1rem;
+  z-index: 2;
+  gap: 0.5rem;
+}
+
+/* Logo on the left */
+.card-nav-logo {
+  font-family: var(--font-display), serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #e5c487;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+/* Sign In button in the center-right */
+.card-nav-signin {
+  font-family: var(--font-body), sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color 0.3s ease;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0.5rem 0.75rem;
+}
+
+.card-nav-signin:hover {
+  color: #e5c487;
+}
+
+/* Hamburger */
+.card-nav-hamburger {
+  height: 40px;
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  gap: 5px;
+  flex-shrink: 0;
+  border-radius: 0.5rem;
+  transition: background-color 0.2s ease;
+}
+
+.card-nav-hamburger:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.card-nav-hamburger:hover .card-nav-hamburger-line {
+  opacity: 0.85;
+}
+
+.card-nav-hamburger-line {
+  width: 22px;
+  height: 1.5px;
+  background-color: rgba(255, 255, 255, 0.7);
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.2s ease,
+    margin 0.3s ease;
+  transform-origin: 50% 50%;
+}
+
+.card-nav-hamburger.open .card-nav-hamburger-line:first-child {
+  transform: translateY(3.25px) rotate(45deg);
+}
+
+.card-nav-hamburger.open .card-nav-hamburger-line:last-child {
+  transform: translateY(-3.25px) rotate(-45deg);
+}
+
+/* Content area */
+.card-nav-content {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 56px;
+  bottom: 0;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 1;
+  justify-content: flex-start;
+}
+
+.card-nav.open .card-nav-content {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* Nav cards */
+.card-nav-card {
+  flex: 0 0 auto;
+  min-height: 64px;
+  border-radius: calc(1rem - 4px);
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  gap: 12px;
+  user-select: none;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-nav-card:hover {
+  transform: scale(1.01);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.card-nav-card:active {
+  transform: scale(0.99);
+}
+
+.card-nav-card-label {
+  font-family: var(--font-display), serif;
+  font-weight: 500;
+  font-size: 18px;
+  letter-spacing: -0.3px;
+}
+
+.card-nav-card-desc {
+  font-family: var(--font-body), sans-serif;
+  font-size: 12px;
+  opacity: 0.6;
+  margin-top: 2px;
+}
+
+.card-nav-card-arrow {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  opacity: 0.5;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.card-nav-card:hover .card-nav-card-arrow {
+  opacity: 1;
+  transform: translateX(2px) translateY(-2px);
+}

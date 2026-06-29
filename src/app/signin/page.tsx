@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import BubblyButton from '@/components/BubblyButton';
 import SplitText from '@/components/SplitText';
+import SeamlessVideo from '@/components/SeamlessVideo';
 import { auth, googleProvider } from '@/lib/firebase-client';
 import { signInWithPopup, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 
@@ -154,19 +155,11 @@ export default function SignInPage() {
     <div className="bg-background min-h-screen relative flex items-center justify-center overflow-hidden">
       {/* Background Video/Image */}
       <div className="absolute inset-0 z-0">
-        <video
-          className="w-full h-full object-cover opacity-30"
+        <SeamlessVideo
           src="/hero.mp4"
-          autoPlay loop muted playsInline
-          onError={(e) => {
-            (e.target as HTMLVideoElement).style.display = 'none';
-            const parent = (e.target as HTMLElement).parentElement;
-            if (parent) {
-              parent.style.backgroundImage = `url('/images/cta.png')`;
-              parent.style.backgroundSize = 'cover';
-              parent.style.backgroundPosition = 'center';
-            }
-          }}
+          className="w-full h-full opacity-30"
+          fadeDuration={1.5}
+          fallbackImage="/images/cta.png"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-[#131313]/90" />
       </div>
@@ -178,6 +171,17 @@ export default function SignInPage() {
         transition={{ duration: 0.6, ease: 'easeOut' }}
         className="relative z-10 w-full max-w-md mx-4 bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] rounded-[32px] p-10 shadow-[0_8px_64px_rgba(0,0,0,0.5)]"
       >
+        {/* Exit Button */}
+        <Link 
+          href="/" 
+          className="absolute top-5 right-5 text-white/30 hover:text-white transition-colors duration-300 flex items-center justify-center p-2 rounded-full hover:bg-white/5 cursor-pointer"
+          aria-label="Back to home"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </Link>
+
         <div className="flex flex-col items-center text-center">
           <Link href="/" className="mb-8 block font-display text-3xl text-primary font-bold tracking-[0.15em] uppercase hover:text-white transition-colors duration-300">
             Jackie

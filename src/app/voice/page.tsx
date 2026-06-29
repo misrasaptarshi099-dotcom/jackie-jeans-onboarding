@@ -73,6 +73,7 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
   const answersRef = useRef<Answers>(answers);
   const isMutedRef = useRef(false);
   const isUnmountedRef = useRef(false);
+  const showManualInputRef = useRef(false);
 
   // Sync answersRef with answers state to avoid stale closure references in async loops
   useEffect(() => {
@@ -93,7 +94,7 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
 
   // Helper to call ElevenLabs proxy stream and play
   const playSpeech = async (text: string): Promise<void> => {
-    if (isUnmountedRef.current) return;
+    if (isUnmountedRef.current || showManualInputRef.current) return;
     setVoiceStatus('speaking');
 
     const speakNatively = (fallbackText: string) => {
@@ -180,7 +181,7 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
 
   // Connect to Deepgram and start microphone recording
   const startListening = async (question: Question, brandIdx: number) => {
-    if (isUnmountedRef.current) return;
+    if (isUnmountedRef.current || showManualInputRef.current) return;
     if (isMutedRef.current) return;
     setVoiceStatus('listening');
     setTranscriptText('Listening...');
@@ -189,6 +190,10 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
     try {
       // 1. Get temporary Deepgram token
       const tokenRes = await fetch('/api/deepgram-token');
+
+      // Check lifecycle after async token fetch
+      if (isUnmountedRef.current || showManualInputRef.current || isMutedRef.current) return;
+
       if (!tokenRes.ok) {
         console.warn('Failed to fetch Deepgram token. Activating manual text input.');
         setShowManualInput(true);
@@ -207,6 +212,9 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
         return;
       }
 
+      // Check lifecycle before requesting microphone access
+      if (isUnmountedRef.current || showManualInputRef.current || isMutedRef.current) return;
+
       // 2. Request microphone stream
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -215,6 +223,12 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
           autoGainControl: true
         }
       });
+
+      // If cleanup happened during getUserMedia, release the stream immediately
+      if (isUnmountedRef.current || showManualInputRef.current || isMutedRef.current) {
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
       streamRef.current = stream;
 
       // Generate contextual keywords based on the active question
@@ -423,7 +437,7 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
         if (result.action === 'REPEAT') {
           speakAndQueryNext(actualIdx, brandIdx, updatedAnswers);
         } else if (result.action === 'PREVIOUS') {
-          // Go back one question (naive handling of brand loop, if in brand loop, go back to brands)
+          // Go back one question
           if (question.id === 'brandSizes') {
              if (brandIdx > 0) {
                 speakAndQueryNext(actualIdx, brandIdx - 1, updatedAnswers);
@@ -431,6 +445,12 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
                 setCurrentIdx(actualIdx - 1);
                 speakAndQueryNext(actualIdx - 1, 0, updatedAnswers);
              }
+          } else if (question.id === 'frustrations' && updatedAnswers.brands.length > 0) {
+             // Return to last brand size, not the first one
+             const lastBrandIdx = updatedAnswers.brands.length - 1;
+             setCurrentIdx(8);
+             setCurrentBrandIdx(lastBrandIdx);
+             speakAndQueryNext(8, lastBrandIdx, updatedAnswers);
           } else if (actualIdx > 0) {
              setCurrentIdx(actualIdx - 1);
              speakAndQueryNext(actualIdx - 1, 0, updatedAnswers);
@@ -535,6 +555,9 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
     setVoiceStatus('processing');
     setTranscriptText('Jackie is preparing your profile...');
 
+    let hasSavedProfile = false;
+    let hasGeneratedProfile = false;
+
     try {
       // Fetch user ID Token if logged in
       const currentUser = auth.currentUser;
@@ -575,6 +598,7 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
         const saveData = await saveRes.json();
         if (saveData.success && saveData.id) {
           setSavedProfileId(saveData.id);
+          hasSavedProfile = true;
         }
       } else if (saveRes && !saveRes.ok) {
         console.warn('DB Save warning in Voice.');
@@ -583,6 +607,7 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
       if (profileRes && profileRes.ok) {
         const profileData = await profileRes.json();
         setJackieProfile(profileData);
+        hasGeneratedProfile = true;
         try {
           localStorage.setItem('jackieProfile', JSON.stringify(profileData));
         } catch (e) {
@@ -593,7 +618,10 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
       console.error('Unhandled error in Voice Quiz submission:', err);
     } finally {
       setIsSubmitting(false);
-      setIsCompleted(true);
+      // Only mark completed if we got a saved profile or a generated profile
+      if (hasSavedProfile || hasGeneratedProfile) {
+        setIsCompleted(true);
+      }
     }
   };
 
@@ -602,10 +630,6 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
     const params = new URLSearchParams();
     if (savedProfileId) {
       params.set('profileId', savedProfileId);
-    }
-    const currentUser = auth.currentUser;
-    if (currentUser) {
-      params.set('userId', currentUser.uid);
     }
 
     // Use window.location.href for external redirects as Next.js router.push expects internal paths
@@ -904,6 +928,7 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
           onClick={() => {
             const nextVal = !showManualInput;
             setShowManualInput(nextVal);
+            showManualInputRef.current = nextVal;
             if (nextVal) {
               cleanupStreams();
               setVoiceStatus('idle');

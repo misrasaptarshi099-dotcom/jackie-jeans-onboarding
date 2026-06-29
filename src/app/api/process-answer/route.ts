@@ -59,30 +59,29 @@ function localRegexFallback(
   }
 
   if (questionId === 'height') {
-    // Look for feet and inches e.g. "five foot six", "5 foot 11", "5 8"
-    const feetMatch = text.match(/(?:five|six|four|5|6|4)\s*foot|\b([456])\b/i);
-    const inchMatch = text.match(/foot\s*(\w+)|(?:inch|in)\b|\b([0-9]|10|11|12)\b/i);
-    
-    let feet = 5;
-    let inches = 6;
-    
-    if (text.includes('four') || text.includes('4')) feet = 4;
-    if (text.includes('six') || text.includes('6')) feet = 6;
-    
-    // Parse inches
+    // Parse height only when both feet and inches are confidently extracted
     const numbers = text.match(/\b(10|11|12|[0-9])\b/g);
-    if (numbers && numbers.length > 0) {
-      if (numbers.length >= 2) {
-        feet = parseInt(numbers[0]);
-        inches = parseInt(numbers[1]);
-      } else {
-        inches = parseInt(numbers[0]);
-      }
+    let feet: number | null = null;
+    let inches: number | null = null;
+
+    // Word-based feet detection
+    if (text.includes('four') && text.includes('foot')) feet = 4;
+    else if (text.includes('five') && text.includes('foot')) feet = 5;
+    else if (text.includes('six') && text.includes('foot')) feet = 6;
+
+    if (numbers && numbers.length >= 2) {
+      feet = parseInt(numbers[0]);
+      inches = parseInt(numbers[1]);
+    } else if (feet !== null && numbers && numbers.length === 1) {
+      // Feet parsed from words, inches from the single number
+      inches = parseInt(numbers[0]);
     }
-    
-    const formatted = `${feet}'${inches}"`;
-    if (options && options.includes(formatted)) {
-      return wrapFallback(questionId, formatted, `Got it, ${feet} foot ${inches}.`);
+
+    if (feet !== null && inches !== null && feet >= 4 && feet <= 7 && inches >= 0 && inches <= 11) {
+      const formatted = `${feet}'${inches}"`;
+      if (options && options.includes(formatted)) {
+        return wrapFallback(questionId, formatted, `Got it, ${feet} foot ${inches}.`);
+      }
     }
     return wrapFallback(questionId, null, '', true, 'Sorry, what was your height? For example, five foot six.');
   }
@@ -108,9 +107,17 @@ function localRegexFallback(
   }
 
   if (['waistFit', 'rise', 'thighFit'].includes(questionId) && options) {
+    // 1. Try full phrase match first (e.g. "high rise" vs "mid rise")
+    for (const opt of options) {
+      if (text.includes(opt.toLowerCase())) {
+        return wrapFallback(questionId, opt, `Got it, ${opt}.`);
+      }
+    }
+    // 2. Fall back to discriminating word tokens, excluding generic words
+    const genericWords = new Set(['rise', 'fit', 'cut', 'the', 'a', 'an', 'is', 'my', 'i']);
     for (const opt of options) {
       const words = opt.toLowerCase().split(' ');
-      if (words.some(word => text.includes(word))) {
+      if (words.filter(w => !genericWords.has(w)).some(word => text.includes(word))) {
         return wrapFallback(questionId, opt, `Got it, ${opt}.`);
       }
     }
@@ -173,25 +180,30 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let parsedBody: any = null;
+  // 1. Parse and validate request body
+  let body: unknown;
   try {
-    const body = await req.json();
-    parsedBody = body;
-    const parsed = requestSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid input payload' }, { status: 400 });
-    }
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Malformed JSON body' }, { status: 400 });
+  }
 
-    const { transcript, questionId, questionType, options, optional, activeBrand, answersState } = parsed.data;
+  const parsed = requestSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Invalid input payload' }, { status: 400 });
+  }
 
-    // Retrieve Gemini API Key
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.warn('GEMINI_API_KEY is not defined. Falling back to local regex matching.');
-      const fallbackResult = localRegexFallback(transcript, questionId, questionType, options, optional, activeBrand);
-      return NextResponse.json(fallbackResult);
-    }
+  const { transcript, questionId, questionType, options, optional, activeBrand, answersState } = parsed.data;
 
+  // 2. Retrieve Gemini API Key
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn('GEMINI_API_KEY is not defined. Falling back to local regex matching.');
+    const fallbackResult = localRegexFallback(transcript, questionId, questionType, options, optional, activeBrand);
+    return NextResponse.json(fallbackResult);
+  }
+
+  try {
     const ai = new GoogleGenAI({ apiKey });
     
     // Construct strict system instructions and prompt
@@ -264,31 +276,12 @@ Analyze the transcript and return the JSON response. Do not include any markdown
       return NextResponse.json(validated.data);
     } catch (parseError) {
       console.error('Failed to parse Gemini JSON output. Raw text:', responseText, parseError);
-      // Fallback if Gemini fails to output valid JSON
-      const fallbackResult = localRegexFallback(
-        transcript,
-        questionId,
-        questionType,
-        options,
-        optional,
-        activeBrand
-      );
+      const fallbackResult = localRegexFallback(transcript, questionId, questionType, options, optional, activeBrand);
       return NextResponse.json(fallbackResult);
     }
   } catch (err: unknown) {
     console.error('Error processing answer with Gemini, falling back to regex:', err);
-    // Always fall back to local regex instead of returning 500
-    const transcriptStr = parsedBody?.transcript || '';
-    const qId = parsedBody?.questionId || '';
-    const qType = parsedBody?.questionType || '';
-    const fallbackResult = localRegexFallback(
-      transcriptStr,
-      qId,
-      qType,
-      parsedBody?.options,
-      parsedBody?.optional,
-      parsedBody?.activeBrand
-    );
+    const fallbackResult = localRegexFallback(transcript, questionId, questionType, options, optional, activeBrand);
     return NextResponse.json(fallbackResult);
   }
 }
