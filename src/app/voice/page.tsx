@@ -408,19 +408,28 @@ export default function VoiceQuiz({ onClose }: { onClose?: () => void }) {
       if (!result.needsClarification && result.action) {
         // 1. Apply any global state updates
         const updatedAnswers = { ...answersRef.current };
+        // Deep copy brandSizes to ensure no stale references
+        updatedAnswers.brandSizes = { ...answersRef.current.brandSizes };
+        
         if (result.updates) {
           for (const [key, value] of Object.entries(result.updates)) {
-            if (key === 'brandSizes' && activeBrand) {
-               // Safely merge brand sizes
-               updatedAnswers.brandSizes = {
-                 ...updatedAnswers.brandSizes,
-                 [activeBrand]: String(value)
-               };
+            if (key === 'brandSizes') {
+               if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                 // Gemini returned a map of sizes: { "Uniqlo": "28", "Zara": "28" }
+                 for (const [b, v] of Object.entries(value)) {
+                   let cleanV = String(v).replace(/[^a-zA-Z0-9\s]/g, '').slice(0, 10);
+                   updatedAnswers.brandSizes[b] = cleanV;
+                 }
+               } else if (activeBrand) {
+                 // Gemini returned a primitive size value for the active brand
+                 let cleanV = String(value).replace(/[^a-zA-Z0-9\s]/g, '').slice(0, 10);
+                 updatedAnswers.brandSizes[activeBrand] = cleanV;
+               }
             } else if (key === 'brands' || key === 'frustrations') {
                updatedAnswers[key] = Array.isArray(value) ? (value as string[]) : [String(value)];
             } else if (['height', 'weight', 'waist', 'hip', 'waistFit', 'rise', 'thighFit'].includes(key)) {
                const k = key as 'height' | 'weight' | 'waist' | 'hip' | 'waistFit' | 'rise' | 'thighFit';
-               updatedAnswers[k] = String(value);
+               updatedAnswers[k] = String(value).slice(0, 30);
             }
           }
           setAnswers(updatedAnswers);
