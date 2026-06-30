@@ -14,10 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Jackie Fit",
+  metadataBase: new URL("https://jackie-fit.vercel.app"),
+  title: "Jackie Fit - Your Personal AI Denim Size Advisor",
   description: "A premium, conversational voice AI fit advisor that helps you find your perfect jeans size instantly.",
-  verification: {
-    google: "EuLPkysTKEzgYeAE9ISy8GAwDDX9So2EvTlUiBeCGPo",
+  alternates: {
+    canonical: "/",
   },
 };
 
