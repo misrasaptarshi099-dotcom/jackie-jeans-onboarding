@@ -22,6 +22,16 @@ export const metadata: Metadata = {
   },
 };
 
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  name: "Jackie Fit",
+  url: "https://jackie-fit.vercel.app",
+  description: "A premium, conversational voice AI fit advisor that helps you find your perfect jeans size instantly.",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "All",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -33,6 +43,10 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} antialiased`}
     >
       <body className="antialiased font-sans">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
         <LenisScroller>{children}</LenisScroller>
       </body>
     </html>
